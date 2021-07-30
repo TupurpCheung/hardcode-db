@@ -79,6 +79,8 @@ typedef struct {
 	char email[COLUMN_EMAIL_SIZE];	
 } Row;
 
+
+
 typedef struct {
   int file_descriptor;
   uint32_t file_length;
@@ -95,8 +97,15 @@ typedef struct {
 	Pager* pager;
 } Table;
 
+
+typedef struct {
+	Table* table;
+	uint32_t row_num;
+	bool end_of_table;
+} Cursor;
+
 /**
- * id属性的大小，也可以直接写死32
+ * id属性的大小，也可以直接写死4
  */
 const uint32_t ID_SIZE = size_of_attribute(Row,id);
 /**
@@ -144,6 +153,24 @@ const uint32_t EMAIL_OFFSET = size_of_attribute(Row,id) + size_of_attribute(Row,
  * TABLE_MAX_PAGES 最多可以使用的页数
  */
 #define TABLE_MAX_ROWS  ROW_PER_PAGE * TABLE_MAX_PAGES
+
+
+Cursor* page_start(Table* table){
+	Cursor* cursor = malloc(sizeof(Cursor));
+	cursor->table = table;
+	cursor->row_num = 0;
+	cursor->end_of_table = false;
+	return cursor;
+} 
+
+Cursor* page_end(Table* table){
+	Cursor* cursor = malloc(sizeof(Cursor));
+	cursor->table = table;
+	cursor->row_num = table->num_rows;
+	cursor->end_of_table = true;
+	return cursor;
+} 
+
 
 void* get_page(Pager* pager, uint32_t page_num) {
   if (page_num > TABLE_MAX_PAGES) {
@@ -285,22 +312,24 @@ void db_close(Table* table) {
   free(table);
 }
 
-/**
- * 获取某条记录所在的内存空间（槽）的起始地址
- * 
- * @param table   [description]
- * @param row_num [description]
- */
-void* row_slot(Table* table,uint32_t row_num);
 
-void* row_slot(Table* table, uint32_t row_num) {
+
+void* cursor_value(Cursor* cursor) {
+	uint32_t row_num = cursor->row_num;
 	uint32_t page_num = row_num / ROW_PER_PAGE;
-	void *page = get_page(table->pager, page_num);
+	void *page = get_page(cursor->table->pager, page_num);
 	int row_offset = (row_num % ROW_PER_PAGE);
 	int byte_offset = row_offset * ROW_SIZE;	
 	
 	return page + byte_offset;
 	
+}
+
+void cursor_advance(Cursor* cursor) {
+  cursor->row_num += 1;
+  if (cursor->row_num >= cursor->table->num_rows) {
+    cursor->end_of_table = true;
+  }
 }
 
 /**
@@ -444,8 +473,10 @@ ExecuteResult execute_insert(Statement* statement,Table* table) {
 	if (table->num_rows >= TABLE_MAX_ROWS) {
 		return EXECUTE_TABLE_FULL;
 	}
+	
 	Row* row_to_insert = &(statement->row_to_insert);
-	serialize_row(row_to_insert,row_slot(table,table->num_rows));
+	Cursor* cursor = page_end(table);
+	serialize_row(row_to_insert,cursor_value(cursor));
 	table->num_rows += 1;
 
 	return EXECUTE_SUCCESS;
@@ -461,12 +492,14 @@ ExecuteResult execute_insert(Statement* statement,Table* table) {
  */
 ExecuteResult execute_select(Statement* statement,Table* table) {
 	Row row;
-	uint32_t size = table->num_rows;
-	uint32_t i;
-	for(i = 0 ;i < size; i++) {
-		deserialize_row(row_slot(table,i),&row);
+	
+	Cursor* cursor = page_start(table);
+	while(!(cursor->end_of_table)) {
+		deserialize_row(cursor_value(cursor),&row);
 		print_row(&row);
+		cursor_advance(cursor);
 	}
+	free(cursor);
 	return EXECUTE_SUCCESS;
 }
 
