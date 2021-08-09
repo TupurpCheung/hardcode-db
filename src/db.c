@@ -79,7 +79,16 @@ typedef struct {
 	char email[COLUMN_EMAIL_SIZE];	
 } Row;
 
-
+/**
+ *b+tree的节点类型定义
+ * 
+ */
+typedef enum {
+	//内部节点
+	NODE_INTERNAL,
+	//叶子节点
+	NODE_LEAF
+} NodeType;
 
 typedef struct {
   int file_descriptor;
@@ -153,6 +162,79 @@ const uint32_t EMAIL_OFFSET = size_of_attribute(Row,id) + size_of_attribute(Row,
  * TABLE_MAX_PAGES 最多可以使用的页数
  */
 #define TABLE_MAX_ROWS  ROW_PER_PAGE * TABLE_MAX_PAGES
+
+
+
+/**
+*  叶子节点的头部布局
+*  节点类型：1个字节，偏移量0
+*  是否是根节点：1个字节，偏移量1个字节
+*  父节点指针：4个字节，偏移量2个字节
+*  子节点个数：4个字节，偏移量6个字节
+*
+* 	故叶子节点的头部信息共占用 10个字节
+**/
+
+//节点类型的大小和偏移量
+const uint32_t NODE_TYPE_SIZE = sizeof(uint8_t);
+const uint32_t NODE_TYPE_OFFSET = 0;
+
+//根节点的大小和偏移量
+const uint32_t IS_ROOT_SIZE = sizeof(uint8_t);
+const uint32_t IS_ROOT_OFFSET = sizeof(uint8_t);
+
+//父节点指针的大小和偏移量
+const uint32_t PARENT_POINTER_SIZE = sizeof(uint32_t);
+const uint32_t PARENT_POINTER_OFFSET = sizeof(uint8_t) + sizeof(uint8_t);
+const uint8_t COMMON_NODE_HEADER_SIZE = sizeof(uint8_t) + sizeof(uint8_t) + sizeof(uint32_t);
+
+//子节点个数的大小和偏移量
+const uint32_t LEAF_NODE_NUM_CELLS_SIZE = sizeof(uint32_t);
+const uint32_t LEAF_NODE_NUM_CELLS_OFFSET = sizeof(uint8_t) + sizeof(uint8_t) + sizeof(uint32_t);
+
+//叶子节点头部布局的大小，10个字节
+const uint32_t LEAF_NODE_HEADER_SIZE = sizeof(uint8_t) + sizeof(uint8_t) + sizeof(uint32_t) + sizeof(uint32_t);
+
+/**
+* 叶子节点的主体布局
+*/
+//一个叶子节点的主键的key大小
+const uint32_t LEAF_NODE_KEY_SIZE = sizeof(uint32_t);
+const uint32_t LEAF_NODE_KEY_OFFSET = 0;
+
+//一个叶子节点的数据大小
+const uint32_t LEAF_NODE_VALUE_SIZE = 291;
+const uint32_t LEAF_NODE_VALUE_OFFSET =    sizeof(uint32_t);
+
+//一个叶子节点的大小 = 数据+主键
+const uint32_t LEAF_NODE_CELL_SIZE = 295;
+
+//一页（4k=4094字节）可用于存储节点数据的空间=4094字节-页头节点
+const uint32_t LEAF_NODE_SPACE_FOR_CELLS = 4096 - 10;
+
+//一页最多可以存放多少个叶子节点
+const uint32_t LEAF_NODE_MAX_CELLS = 4086 / 295;
+
+//获取存放节点中子节点个数，内存的起始位置
+uint32_t* leaf_node_num_cells(void* node) {
+  return node + LEAF_NODE_NUM_CELLS_OFFSET;
+}
+
+//获取节点下指定子节点的key（主键）内存起始位置
+void* leaf_node_cell(void* node, uint32_t cell_num) {
+  return node + LEAF_NODE_HEADER_SIZE + cell_num * LEAF_NODE_CELL_SIZE;
+}
+//获取节点下指定子节点的key（主键）内存起始位置
+uint32_t* leaf_node_key(void* node, uint32_t cell_num) {
+  return leaf_node_cell(node, cell_num);
+}
+//获取节点下指定子节点的数据（行记录）内存起始位置
+void* leaf_node_value(void* node, uint32_t cell_num) {
+  return leaf_node_cell(node, cell_num) + LEAF_NODE_KEY_SIZE;
+}
+
+//初始化节点，子节点个数为0
+void initialize_leaf_node(void* node) { *leaf_node_num_cells(node) = 0; }
 
 
 Cursor* page_start(Table* table){

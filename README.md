@@ -6,6 +6,8 @@
 
 https://cstack.github.io/db_tutorial/
 
+https://www.kancloud.cn/kancloud/theory-of-mysql-index/41846
+
 
 
 ### 二：具体信息
@@ -33,6 +35,10 @@ https://cstack.github.io/db_tutorial/
 
 
 #### 2.3、数据持久化
+
++ 编译
+
+  `gcc -Wall ./db.c -o db`
 
 + 运行
 
@@ -82,6 +88,17 @@ https://cstack.github.io/db_tutorial/
 
 
 #### 2.5、B+tree 结构
+
++ 一页（Page）的大小为4Kb，读取到内存中就是一个节点（Node）。
+
++ 叶子节点header
+  + 节点类型（node_type），1个字节。
+  + 是否为根节点（is_root），1个字节。
+  + 父节点指针（parent_poiner），4个字节
+  + 当前页子节点个数（num_cells），4个字节
++ 叶子节点body
+  + 主键（key），4个字节
+  + 行记录（数据），291个字节
 
 
 
