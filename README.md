@@ -127,6 +127,10 @@ https://www.kancloud.cn/kancloud/theory-of-mysql-index/41846
 
   行记录、页、表、游标的结构定义
 
++ db-io
+
+  获取用户输入，文件的磁盘读写
+
 + db-btree
 
   将页数据当作b+tree来处理

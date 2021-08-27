@@ -1,6 +1,6 @@
+#ifndef _DBENUM_H_
 
-
-
+#define _DBENUM_H_
 /**
  * 语句元操作验证结果
  * 合法的操作类型
@@ -52,3 +52,5 @@ typedef enum {
 	//叶子节点
 	NODE_LEAF
 } NodeType;
+
+#endif

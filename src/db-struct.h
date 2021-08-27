@@ -1,7 +1,11 @@
+#ifndef _DBSTRUCT_H_
+#define _DBSTRUCT_H_
 
 #include <stdint.h>
 #include <stdlib.h>
 #include <stdbool.h>
+#include "db-enum.h"
+
 
 /*用户名长度*/
 #define COLUMN_USERNAME_SIZE 32
@@ -64,3 +68,14 @@ typedef struct {
 } Cursor;
 //Cursor->Table->Pager->pages[page_nums]
 //table_start(table_open(pager_open(filename)))
+//
+/**
+ *单次操作
+ * 
+ */
+typedef struct {
+	StatementType type;
+	Row row_to_insert;
+} Statement;
+
+#endif
