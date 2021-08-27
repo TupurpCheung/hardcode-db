@@ -6,6 +6,8 @@
 
 https://cstack.github.io/db_tutorial/
 
+https://blog.japinli.top/db_tutorial_trans/
+
 https://www.kancloud.cn/kancloud/theory-of-mysql-index/41846
 
 
@@ -38,11 +40,11 @@ https://www.kancloud.cn/kancloud/theory-of-mysql-index/41846
 
 + 编译
 
-  `gcc -Wall ./db.c -o db`
+  `make`
 
 + 运行
 
-  `./db mydb.db`
+  `./db-engine.o mydb.db`
 
 + 新增
 
@@ -108,4 +110,28 @@ https://www.kancloud.cn/kancloud/theory-of-mysql-index/41846
 + `insert` 参数预处理校验
 + 执行语句
 + 序列化反序列化
+
+
+
+### 四：源码结构
+
++ db-constant 
+
+  定义了全局变量，主要是一些起始位置和偏移量
+
++ db-enum 
+
+  操作、返回值的枚举
+
++ db-struct
+
+  行记录、页、表、游标的结构定义
+
++ db-btree
+
+  将页数据当作b+tree来处理
+
++ db-engine
+
+  程序入口
 

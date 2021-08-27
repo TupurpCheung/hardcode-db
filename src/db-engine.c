@@ -6,234 +6,13 @@
 #include <string.h>
 #include <stdint.h>
 #include <unistd.h>
+#include "db-constant.h"
+#include "db-enum.c"
+#include "db-struct.c"
+#include "db-btree.h"
 
-/*用户名长度*/
-#define COLUMN_USERNAME_SIZE 32
-/**用户邮箱长度*/
-#define COLUMN_EMAIL_SIZE 255
-#define TABLE_MAX_PAGES 100
-/*页大小，4096字节,即4Kb*/
-const uint32_t PAGE_SIZE = 4096;
 #define size_of_attribute(Struct,Attribute) sizeof(((Struct*)0)->Attribute)
 
-
-
-/**
- * 语句元操作验证结果
- * 合法的操作类型
- * 非法的操作类型
- * 
- */
-typedef enum {
-	META_COMMAND_SUCCESS,
-	META_COMMAND_UNRECOGNIZED_COMMAND
-} MetaCommandResult;
-
-/**
- *数据库操作类型
- *插入、查询
- * 
- */
-typedef enum {
-	STATEMENT_INSERT,
-	STATEMENT_SELECT
-} StatementType;
-
-/**
- * 语句预处理验证结果
- * 
- */
-typedef enum {
-	PREPARE_SUCCESS,
-	PREPARE_SYNTAX_ERROR,
-	PREPARE_UNRECOGNIZED_STATEMENT
-} PrepareResult;
-
-/**
- *语句执行结果
- * 
- */
-typedef enum {
-	EXECUTE_SUCCESS,
-	EXECUTE_TABLE_FULL
-	
-} ExecuteResult;
-
-/**
- *b+tree的节点类型定义
- * 
- */
-typedef enum {
-	//内部节点
-	NODE_INTERNAL,
-	//叶子节点
-	NODE_LEAF
-} NodeType;
-
-/**
- * 命令行输入流的抽象
- */
-typedef struct {	
-	char* buffer;
-	size_t buffer_length;
-	ssize_t input_length;
-
-} InputBuffer;
-
-/**
- *一条记录
- * 
- */
-typedef struct {
-	uint32_t id;
-	char username[COLUMN_USERNAME_SIZE];
-	char email[COLUMN_EMAIL_SIZE];	
-} Row;
-
-
-typedef struct {
-	//文件名
-  int file_descriptor;
-  //文件长度
-  uint32_t file_length;
-  //文件当前有多少页
-  uint32_t num_pages;
-  //存放页数据的数组
-  void* pages[TABLE_MAX_PAGES];
-} Pager;
-
-
-/**
- *表
- * 
- */
-typedef struct {
-	//根节点页的页码
-	uint32_t root_page_num;
-	Pager* pager;
-} Table;
-
-
-typedef struct {
-	Table* table;
-	uint32_t page_num;
-	uint32_t cell_num;
-	bool end_of_table;
-} Cursor;
-//Cursor->Table->Pager->pages[page_nums]
-//table_start(table_open(pager_open(filename)))
-
-/**
- * id属性的大小，也可以直接写死4
- */
-const uint32_t ID_SIZE = size_of_attribute(Row,id);
-/**
- * 用户名属性的大小，也可以直接写死32
- */
-const uint32_t USERNAME_SIZE = size_of_attribute(Row,username);
-/**
- * 邮箱属性的大小，也可以直接写死255
- */
-const uint32_t EMAIL_SIZE = size_of_attribute(Row,email);
-
-/**
- * 一条记录占用的内存大小255+32+4=291
- * 
- */
-const uint32_t ROW_SIZE = size_of_attribute(Row,id) + size_of_attribute(Row,username) + size_of_attribute(Row,email);
-/**
- * 
- * id偏移量,从0开始
- * 从此偏移量开始，移动ID_SIZE长度的位置，存放的是Id信息
- */
-const uint32_t ID_OFFSET = 0;
-/**
- * 
- * 用户名偏移量
- * 从此偏移量开始，移动USERNAME_SIZE长度的位置，存放的是 用户名 信息
- */
-const uint32_t USERNAME_OFFSET = size_of_attribute(Row,id);
-/**
- * 
- * 邮箱偏移量
- * 从此偏移量开始，移动EMAIL_SIZE长度的位置，存放的是 邮箱 信息
- */
-const uint32_t EMAIL_OFFSET = size_of_attribute(Row,id) + size_of_attribute(Row,username);
-
-
-
-
-
-/**
-*  叶子节点的头部布局
-*  节点类型：1个字节，偏移量0
-*  是否是根节点：1个字节，偏移量1个字节
-*  父节点指针：4个字节，偏移量2个字节
-*  子节点个数：4个字节，偏移量6个字节
-*
-* 	故叶子节点的头部信息共占用 10个字节
-**/
-
-//节点类型的大小和偏移量
-const uint32_t NODE_TYPE_SIZE = sizeof(uint8_t);
-const uint32_t NODE_TYPE_OFFSET = 0;
-
-//根节点的大小和偏移量
-const uint32_t IS_ROOT_SIZE = sizeof(uint8_t);
-const uint32_t IS_ROOT_OFFSET = sizeof(uint8_t);
-
-//父节点指针的大小和偏移量
-const uint32_t PARENT_POINTER_SIZE = sizeof(uint32_t);
-const uint32_t PARENT_POINTER_OFFSET = sizeof(uint8_t) + sizeof(uint8_t);
-const uint8_t COMMON_NODE_HEADER_SIZE = sizeof(uint8_t) + sizeof(uint8_t) + sizeof(uint32_t);
-
-//子节点个数的大小和偏移量
-const uint32_t LEAF_NODE_NUM_CELLS_SIZE = sizeof(uint32_t);
-const uint32_t LEAF_NODE_NUM_CELLS_OFFSET = sizeof(uint8_t) + sizeof(uint8_t) + sizeof(uint32_t);
-
-//叶子节点头部布局的大小，10个字节
-const uint32_t LEAF_NODE_HEADER_SIZE = sizeof(uint8_t) + sizeof(uint8_t) + sizeof(uint32_t) + sizeof(uint32_t);
-
-/**
-* 叶子节点的主体布局
-*/
-//一个叶子节点的主键的key大小
-const uint32_t LEAF_NODE_KEY_SIZE = sizeof(uint32_t);
-const uint32_t LEAF_NODE_KEY_OFFSET = 0;
-
-//一个叶子节点的数据大小
-const uint32_t LEAF_NODE_VALUE_SIZE = 291;
-const uint32_t LEAF_NODE_VALUE_OFFSET =    sizeof(uint32_t);
-
-//一个叶子节点的大小 = 数据+主键
-const uint32_t LEAF_NODE_CELL_SIZE = 295;
-
-//一页（4k=4094字节）可用于存储节点数据的空间=4094字节-页头节点
-const uint32_t LEAF_NODE_SPACE_FOR_CELLS = 4096 - 10;
-
-//一页最多可以存放多少个叶子节点
-const uint32_t LEAF_NODE_MAX_CELLS = 4086 / 295;
-
-//获取存放节点中子节点个数，内存的起始位置指针
-uint32_t* leaf_node_num_cells(void* node) {
-  return node + LEAF_NODE_NUM_CELLS_OFFSET;
-}
-
-//获取节点下指定子节点的key（主键）内存起始位置
-void* leaf_node_cell(void* node, uint32_t cell_num) {
-  return node + LEAF_NODE_HEADER_SIZE + cell_num * LEAF_NODE_CELL_SIZE;
-}
-//获取节点下指定子节点的key（主键）内存起始位置
-uint32_t* leaf_node_key(void* node, uint32_t cell_num) {
-  return leaf_node_cell(node, cell_num);
-}
-//获取节点下指定子节点的数据（行记录）内存起始位置
-void* leaf_node_value(void* node, uint32_t cell_num) {
-  return leaf_node_cell(node, cell_num) + LEAF_NODE_KEY_SIZE;
-}
-
-//初始化节点，子节点个数为0
-void initialize_leaf_node(void* node) { *leaf_node_num_cells(node) = 0; }
 
 
 
@@ -266,7 +45,7 @@ Pager* pager_open(const char* filename) {
   	//指定文件长度
   	pager->file_length = file_length;
   	//指定共有多少页
-  	pager->num_pages = (file_length / PAGE_SIZE)
+  	pager->num_pages = (file_length / PAGE_SIZE);
   	//使用B+tree后，文件大小是页对齐的，也就是一定是4K的整倍数
   	if (file_length % PAGE_SIZE != 0) {
   		printf("Db file is not a whole number of pages. Corrupt file.\n");
@@ -274,7 +53,7 @@ Pager* pager_open(const char* filename) {
   	}
 		uint32_t i ;
 		uint32_t size = TABLE_MAX_PAGES;
-		for(i =0 ;i< size;i++) {
+		for(i = 0 ;i< size;i++) {
 			pager->pages[i] = NULL;
 		}
 		return pager;
@@ -400,7 +179,7 @@ void table_close(Table* table) {
   	Pager* pager = table->pager;
   	
 	uint32_t i;
-	uint32_t max = table->num_pages;
+	uint32_t max = table->pager->num_pages;
   for ( i = 0; i < max; i++) {
      if (pager->pages[i] == NULL) {
          continue;
@@ -435,14 +214,14 @@ void* cursor_value(Cursor* cursor) {
 	
 	uint32_t page_num = cursor->page_num;
 	void *page = get_page(cursor->table->pager, page_num);	
-	return left_node_value(page,cursor->cell_num);
+	return leaf_node_value(page,cursor->cell_num);
 	
 }
 
 void cursor_advance(Cursor* cursor) {
 	uint32_t page_num = cursor->page_num;
 	void* node =get_page(cursor->table->pager,page_num);
-  cursor->cell_num += 1;
+    cursor->cell_num += 1;
   if (cursor->cell_num >= (*leaf_node_num_cells(node))) {
     cursor->end_of_table = true;
   }
@@ -503,6 +282,32 @@ void print_prompt() {
 	printf("sql-db > ");
 }
 /**
+ * 打印常量
+ * 
+ */
+void print_constants() {
+  printf("ROW_SIZE: %d\n", ROW_SIZE);
+  printf("COMMON_NODE_HEADER_SIZE: %d\n", COMMON_NODE_HEADER_SIZE);
+  printf("LEAF_NODE_HEADER_SIZE: %d\n", LEAF_NODE_HEADER_SIZE);
+  printf("LEAF_NODE_CELL_SIZE: %d\n", LEAF_NODE_CELL_SIZE);
+  printf("LEAF_NODE_SPACE_FOR_CELLS: %d\n", LEAF_NODE_SPACE_FOR_CELLS);
+  printf("LEAF_NODE_MAX_CELLS: %d\n", LEAF_NODE_MAX_CELLS);
+}
+
+/**
+ * 
+ * 打印节点
+ */
+void print_leaf_node(void* node) {
+  uint32_t num_cells = *leaf_node_num_cells(node);
+  printf("leaf (size %d)\n", num_cells);
+  uint32_t i;
+  for ( i = 0; i < num_cells; i++) {
+    uint32_t key = *leaf_node_key(node, i);
+    printf("  - %d : %d\n", i, key);
+  }
+}
+/**
  * 打印记录
  * 
  * @param row [description]
@@ -547,7 +352,15 @@ MetaCommandResult do_meta_command(InputBuffer* input_buffer,Table* table){
 		close_input_buffer(input_buffer);
 		table_close(table);
 		exit(EXIT_SUCCESS);
-	} else {
+	 } else if (strcmp(input_buffer->buffer, ".btree") == 0) {
+    	printf("Tree:\n");
+    	print_leaf_node(get_page(table->pager, 0));
+    	return META_COMMAND_SUCCESS;
+  	} else if (strcmp(input_buffer->buffer, ".constants") == 0) {
+   		printf("Constants:\n");
+    	print_constants();
+    	return META_COMMAND_SUCCESS;
+    } else {
 		return META_COMMAND_UNRECOGNIZED_COMMAND;
 	}
 }
@@ -579,6 +392,34 @@ PrepareResult prepare_statement(InputBuffer* input_buffer,Statement* statement) 
 	return PREPARE_UNRECOGNIZED_STATEMENT;
 }
 
+void leaf_node_insert(Cursor* cursor, uint32_t key,Row* row) {
+	//获取记录所在的页
+	void* node = get_page(cursor->table->pager,cursor->page_num);
+
+	//计算该页存放了多少个记录
+	uint32_t num_cells = *leaf_node_num_cells(node);
+
+	if (num_cells >= LEAF_NODE_MAX_CELLS) {
+		//当前页存放子节点已满
+		//TODO 需要切分子节点
+		printf("Need to implement splitting a leaft node\n");
+		exit(EXIT_FAILURE);
+	}
+
+	if (cursor->cell_num < num_cells) {
+		uint32_t i ;
+		for (i = num_cells; i > cursor->cell_num; --i) {
+			memcpy(leaf_node_cell(node,i),leaf_node_cell(node,i-1),LEAF_NODE_CELL_SIZE);			
+		}
+	}
+
+	//更新页中子节点数量 加1
+	*(leaf_node_num_cells(node)) += 1;
+	//更新节点的主键
+	*(leaf_node_key(node,cursor->cell_num)) = key;
+	 serialize_row(row, leaf_node_value(node, cursor->cell_num));
+}
+
 /**
  * 插入操作
  * @param  statement [description]
@@ -586,16 +427,18 @@ PrepareResult prepare_statement(InputBuffer* input_buffer,Statement* statement) 
  * @return           [description]
  */
 ExecuteResult execute_insert(Statement* statement,Table* table) {
-	if (table->num_rows >= TABLE_MAX_ROWS) {
+	void* node = get_page(table->pager,table->root_page_num);
+	if ((*leaf_node_num_cells(node))>= LEAF_NODE_MAX_CELLS) {
 		return EXECUTE_TABLE_FULL;
 	}
 	
 	Row* row_to_insert = &(statement->row_to_insert);
 	Cursor* cursor = table_end(table);
-	serialize_row(row_to_insert,cursor_value(cursor));
-	table->num_rows += 1;
 
-	return EXECUTE_SUCCESS;
+	leaf_node_insert(cursor,row_to_insert->id,row_to_insert);
+	
+
+	free(cursor);
 
 }
 
