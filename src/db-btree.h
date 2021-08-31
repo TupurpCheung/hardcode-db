@@ -2,6 +2,7 @@
 #define _DBBTREE_H_
 #include <stdio.h>
 #include <stdint.h>
+#include "db-enum.h"
 #include "db-struct.h"
 
 
@@ -20,10 +21,16 @@ void* leaf_node_cell(void* page, uint32_t cell_num);
 uint32_t* leaf_node_key(void* page, uint32_t cell_num);
 //获取指定节点的值
 void* leaf_node_value(void* page, uint32_t cell_num);
+//获取节点类型
+NodeType get_node_type(void *page);
+//设置节点类型
+void set_node_type(void *page,NodeType type);
 //初始化页（节点）
 void initialize_leaf_node(void* page) ;
+//插入数据
 void leaf_node_insert(Cursor* cursor, uint32_t key,Row* row);
-
+//查找数据
+Cursor* leaf_node_find(Table *table,uint32_t page_num, uint32_t key);
 
 
 
@@ -54,9 +61,9 @@ Table* table_open(const char* filename);
 //定位到表头
 Cursor* table_start(Table* table);
 /**
- * 读取表尾
+ * 通过key在表中查找记录
  */
-Cursor* table_end(Table* table);
+Cursor* table_find(Table* table,uint32_t key);
 /**
  * 关闭表
  */
