@@ -58,10 +58,10 @@ void initialize_leaf_node(void* page) {
 //插入数据
 void leaf_node_insert(Cursor* cursor, uint32_t key,Row* row) {
 	//获取记录所在的页
-	void* node = get_page(cursor->table->pager,cursor->page_num);
+	void* page = get_page(cursor->table->pager,cursor->page_num);
 
 	//计算该页存放了多少个记录
-	uint32_t num_cells = *leaf_node_num_cells(node);
+	uint32_t num_cells = *leaf_node_num_cells(page);
 
 	if (num_cells >= LEAF_NODE_MAX_CELLS) {
 		//当前页存放子节点已满
@@ -71,20 +71,28 @@ void leaf_node_insert(Cursor* cursor, uint32_t key,Row* row) {
 	}
 
 	if (cursor->cell_num < num_cells) {
+    //将数据后移
 		uint32_t i ;
 		for (i = num_cells; i > cursor->cell_num; --i) {
-			memcpy(leaf_node_cell(node,i),leaf_node_cell(node,i-1),LEAF_NODE_CELL_SIZE);			
+      //destin-- 指向用于存储复制内容的目标数组，类型强制转换为 void* 指针。
+      //source-- 指向要复制的数据源，类型强制转换为 void* 指针。
+      //n-- 要被复制的字节数。
+      //索引从0开始，所以有10个数据的时候，最大的cell_num  = 9
+			memcpy(leaf_node_cell(page,i),leaf_node_cell(page,i-1),LEAF_NODE_CELL_SIZE);			
 		}
 	}
 
 	//更新页中子节点数量 加1
-	*(leaf_node_num_cells(node)) += 1;
+	*(leaf_node_num_cells(page)) += 1;
 	//更新节点的主键
-	*(leaf_node_key(node,cursor->cell_num)) = key;
-	 serialize_row(row, leaf_node_value(node, cursor->cell_num));
+	*(leaf_node_key(page,cursor->cell_num)) = key;
+  //序列化记录到内存
+	 serialize_row(row, leaf_node_value(page, cursor->cell_num));
+
 }
 
 Cursor* leaf_node_find(Table *table,uint32_t page_num, uint32_t key) {
+  //子节点数量计数从0开始
 	uint32_t min_index = 0;
 	uint32_t one_past_max_index;
 	void *page = get_page(table->pager,page_num);
