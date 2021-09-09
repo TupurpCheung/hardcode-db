@@ -13,12 +13,63 @@
 #include "db-btree.h"
 
 
+/**
+ *  节点（node）实际上就是页（page）
+ *  节点的通用操作
+ */
+//获取节点类型
+NodeType get_node_type(void *page) {
+	 uint8_t value = *((uint8_t *)(page + NODE_TYPE_OFFSET));
+	 return (NodeType) value;
+}
+//设置节点类型
+void set_node_type(void *page,NodeType type) {
+	uint8_t value = type;
+	*((uint8_t *)(page + NODE_TYPE_OFFSET)) = value;
+}
 
 
 
 
+/**
+ *内部节点的操作
+ * 
+ */
+//获取内部节点有多少个叶子节点
+uint32_t* internal_node_num_keys(void *page) {
+	return page + INTERNAL_NODE_NUM_KEYS_OFFSET;
+}
+//获取主键最右边叶子节点地址
+uint32_t* internal_node_right_child(void  *page) {
+	return page + INTERNAL_NODE_RIGHT_CHILD_OFFSET;
+}
+//获取第 cell_num 个叶子节点
+uint32_t* internal_node_cell(void *page,uint32_t cell_num) {
+	return page + INTERNAL_NODE_HEADER_SIZE + cell_num * INTERNAL_NODE_CELL_SIZE;
+}
+//获取第 child_num 个叶子节点
+uint32_t* internal_node_child(void *page,uint32_t child_num) {
+	uint32_t num_keys = *internal_node_num_keys(page);
+    if (child_num > num_keys) {
+        printf("Tried to access child_num %d > num_keys %d\n", child_num, num_keys);
+        exit(EXIT_FAILURE);
+    } else if (child_num == num_keys) {
+        return internal_node_right_child(page);
+    }
+
+    return internal_node_cell(page, child_num);
+}
+//获取第 child_num 个叶子节点 的主键
+uint32_t* internal_node_key(void *page,uint32_t key_num) {
+	return internal_node_cell(page, key_num) + INTERNAL_NODE_CHILD_SIZE;
+}
 
 
+
+/**
+ *叶子节点的操作
+ * 
+ */
 //获取存放节点中子节点个数，内存的起始位置指针
 uint32_t* leaf_node_num_cells(void* page) {
   return page + LEAF_NODE_NUM_CELLS_OFFSET;
@@ -36,19 +87,6 @@ uint32_t* leaf_node_key(void* page, uint32_t cell_num) {
 void* leaf_node_value(void* page, uint32_t cell_num) {
   return leaf_node_cell(page, cell_num) + LEAF_NODE_KEY_SIZE;
 }
-
-//获取节点类型
-NodeType get_node_type(void *page) {
-	 uint8_t value = *((uint8_t *)(page + NODE_TYPE_OFFSET));
-	 return (NodeType) value;
-}
-//设置节点类型
-void set_node_type(void *page,NodeType type) {
-	uint8_t value = type;
-	*((uint8_t *)(page + NODE_TYPE_OFFSET)) = value;
-}
-
-
 //初始化节点，子节点个数为0
 void initialize_leaf_node(void* page) { 
 	set_node_type(page,NODE_LEAF);

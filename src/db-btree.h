@@ -7,29 +7,52 @@
 
 
 
-
-
-
-
-
-//一个页page就是一个节点node
-//当前页共存放了多少个节点
-uint32_t* leaf_node_num_cells(void* page);
-//获取指定节点
-void* leaf_node_cell(void* page, uint32_t cell_num);
-//获取指定节点的key
-uint32_t* leaf_node_key(void* page, uint32_t cell_num);
-//获取指定节点的值
-void* leaf_node_value(void* page, uint32_t cell_num);
+/**
+ *  节点（node）实际上就是页（page）
+ *  节点的通用操作
+ */
 //获取节点类型
 NodeType get_node_type(void *page);
 //设置节点类型
 void set_node_type(void *page,NodeType type);
-//初始化页（节点）
+
+
+
+/**
+ *内部节点的操作
+ * 
+ */
+//获取内部节点有多少个叶子节点
+uint32_t* internal_node_num_keys(void *page);
+//获取主键最右边叶子节点地址
+uint32_t* internal_node_right_child(void  *page);
+//获取第 cell_num 个叶子节点
+uint32_t* internal_node_cell(void *page,uint32_t cell_num);
+//获取第 child_num 个叶子节点
+uint32_t* internal_node_child(void *page,uint32_t child_num);
+//获取第 child_num 个叶子节点 的主键
+uint32_t* internal_node_key(void *page,uint32_t key_num);
+
+
+
+
+/**
+ *叶子节点的操作
+ * 
+ */
+//当前页共存放了多少个记录
+uint32_t* leaf_node_num_cells(void* page);
+//获取指定记录
+void* leaf_node_cell(void* page, uint32_t cell_num);
+//获取指定记录的key
+uint32_t* leaf_node_key(void* page, uint32_t cell_num);
+//获取指定记录值
+void* leaf_node_value(void* page, uint32_t cell_num);
+//初始化叶子节点
 void initialize_leaf_node(void* page) ;
-//插入数据
+//插入数据（记录）
 void leaf_node_insert(Cursor* cursor, uint32_t key,Row* row);
-//查找数据
+//查找数据（记录）
 Cursor* leaf_node_find(Table *table,uint32_t page_num, uint32_t key);
 
 
