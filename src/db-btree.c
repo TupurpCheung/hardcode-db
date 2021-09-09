@@ -5,12 +5,30 @@
 #include <errno.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include <stdbool.h>
 
 #include "db-constant.h"
 #include "db-enum.h"
 #include "db-struct.h"
 #include "db-io.h"
 #include "db-btree.h"
+
+/**
+ * 根节点的操作
+ * 
+ */
+//判断节点是否是根节点
+bool is_node_root(void *page) {
+   uint8_t value = *((uint8_t *) (page + IS_ROOT_OFFSET));
+   return (bool) value;
+}
+//设置节点是否根节点
+void set_node_root(void *page,bool is_root) {
+    uint8_t value = is_root;
+	*((uint8_t *) (page + IS_ROOT_OFFSET)) = value;
+}
+
+
 
 
 /**
@@ -27,7 +45,15 @@ void set_node_type(void *page,NodeType type) {
 	uint8_t value = type;
 	*((uint8_t *)(page + NODE_TYPE_OFFSET)) = value;
 }
-
+//获取节点存储记录的最大主键，对于内部节点，最大键始终是其右键。对于叶节点，它是最大索引处的键
+uint32_t uint32_t get_node_max_key(void *page) {
+    switch (get_node_type(page)) {
+    case NODE_INTERNAL:
+        return *internal_node_key(page, *internal_node_num_keys(page) - 1);
+    case NODE_LEAF:
+        return *leaf_node_key(page, *leaf_node_num_cells(page) - 1);
+    }
+}
 
 
 
@@ -63,6 +89,13 @@ uint32_t* internal_node_child(void *page,uint32_t child_num) {
 uint32_t* internal_node_key(void *page,uint32_t key_num) {
 	return internal_node_cell(page, key_num) + INTERNAL_NODE_CHILD_SIZE;
 }
+//初始化内部节点
+void initialize_internal_node(void *page) {
+    set_node_type(page, NODE_INTERNAL);
+    set_node_root(page, false);
+    *internal_node_num_keys(page) = 0;
+}
+
 
 
 
@@ -90,6 +123,8 @@ void* leaf_node_value(void* page, uint32_t cell_num) {
 //初始化节点，子节点个数为0
 void initialize_leaf_node(void* page) { 
 	set_node_type(page,NODE_LEAF);
+	//默认不是根节点
+	set_node_root(page, false);
 	*leaf_node_num_cells(page) = 0; 
 }
 
@@ -311,10 +346,13 @@ Table* table_open(const char* filename) {
   Table* table = malloc(sizeof(Table));
   table->pager = pager;
   table->root_page_num = 0;
-  //没有数据，初始化页码为0的页为叶子节点
+  //没有数据，初始化页码为0的页为叶子节点,并设置为根节点
   if (pager->num_pages == 0) {
   	void* root_node = get_page(pager,0);
+  	//没有数据时，初始化的节点使用叶子节点
   	initialize_leaf_node(root_node);
+  	//设置为根节点
+  	set_node_root(root_node, true);
   }
 
   return table;

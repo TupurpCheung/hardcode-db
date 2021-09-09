@@ -157,8 +157,10 @@ int main(int argc,char* argv[]){
 
 	InputBuffer* input_buffer = new_input_buffer();
 	while(true){
+		//读取输入
 		print_prompt();
 		read_input(input_buffer);
+		//解析输入
 		if(input_buffer->buffer[0] == '.') {
 			switch (do_meta_command(input_buffer,table)) {
 				case (META_COMMAND_SUCCESS):
@@ -168,7 +170,7 @@ int main(int argc,char* argv[]){
 				  continue;
 			}
 		}
-	
+		//预处理
 		Statement statement;
 		switch (prepare_statement(input_buffer,&statement)) {
 			case (PREPARE_SUCCESS):
@@ -179,7 +181,7 @@ int main(int argc,char* argv[]){
 			  printf("unrecognized keyword at start of '%s' .\n",input_buffer->buffer);
 			  continue;
 		}
-		
+		//执行输入的命令
 		switch (execute_statement(&statement,table)) {
 			case (EXECUTE_SUCCESS):
 			  printf("Executed.\n");

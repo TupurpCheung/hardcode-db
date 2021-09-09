@@ -1,9 +1,21 @@
 #ifndef _DBBTREE_H_
 #define _DBBTREE_H_
 #include <stdio.h>
+#include <stdbool.h>
 #include <stdint.h>
 #include "db-enum.h"
 #include "db-struct.h"
+
+
+
+/**
+ * 根节点的操作
+ * 
+ */
+//判断节点是否是根节点
+bool is_node_root(void *page);
+//设置节点是否根节点
+void set_node_root(void *page,bool is_root);
 
 
 
@@ -15,7 +27,8 @@
 NodeType get_node_type(void *page);
 //设置节点类型
 void set_node_type(void *page,NodeType type);
-
+//获取节点存储记录的最大主键，对于内部节点，最大键始终是其右键。对于叶节点，它是最大索引处的键
+uint32_t get_node_max_key(void *page);
 
 
 /**
@@ -32,7 +45,8 @@ uint32_t* internal_node_cell(void *page,uint32_t cell_num);
 uint32_t* internal_node_child(void *page,uint32_t child_num);
 //获取第 child_num 个叶子节点中记录的最大主键
 uint32_t* internal_node_key(void *page,uint32_t key_num);
-
+//初始化内部节点
+void initialize_internal_node(void *page);
 
 
 
