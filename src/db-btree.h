@@ -30,7 +30,7 @@ uint32_t* internal_node_right_child(void  *page);
 uint32_t* internal_node_cell(void *page,uint32_t cell_num);
 //获取第 child_num 个叶子节点
 uint32_t* internal_node_child(void *page,uint32_t child_num);
-//获取第 child_num 个叶子节点 的主键
+//获取第 child_num 个叶子节点中记录的最大主键
 uint32_t* internal_node_key(void *page,uint32_t key_num);
 
 
