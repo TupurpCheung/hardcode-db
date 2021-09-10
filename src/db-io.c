@@ -94,18 +94,49 @@ void print_constants() {
   printf("LEAF_NODE_MAX_CELLS: %d\n", LEAF_NODE_MAX_CELLS);
 }
 
+//打印缩进
+void indent(uint32_t level) {
+   uint32_t i;
+    for (i = 0; i < level; i++) {
+        printf("  ");
+    }
+}
 /**
  * 
- * 打印节点
+ * 打印树
  */
-void print_leaf_node(void* page) {
-  uint32_t num_cells = *leaf_node_num_cells(page);
-  printf("leaf (size %d)\n", num_cells);
-  uint32_t i;
-  for ( i = 0; i < num_cells; i++) {
-    uint32_t key = *leaf_node_key(page, i);
-    printf("  - %d : %d\n", i, key);
-  }
+void print_tree(Pager *pager, uint32_t page_num, uint32_t indentation_level) {
+    uint32_t  i;
+    uint32_t  num_keys;
+    uint32_t  child;
+    void     *node = get_page(pager, page_num);
+
+    switch (get_node_type(node)) {
+    case NODE_LEAF:
+        num_keys = *leaf_node_num_cells(node);
+        indent(indentation_level);
+        printf("- leaf (size %d)\n", num_keys);
+        for (i = 0; i < num_keys; i++) {
+            indent(indentation_level + 1);
+            printf("- %d\n", *leaf_node_key(node, i));
+        }
+        break;
+    case NODE_INTERNAL:
+        num_keys = *internal_node_num_keys(node);
+        indent(indentation_level);
+        printf("- internal (size %d)\n", num_keys);
+        for (i = 0; i < num_keys; i++) {
+            child = *internal_node_child(node, i);
+            print_tree(pager, child, indentation_level + 1);
+
+            indent(indentation_level + 1);
+            printf("- key %d\n", *internal_node_key(node, i));
+        }
+
+        child = *internal_node_right_child(node);
+        print_tree(pager, child, indentation_level + 1);
+        break;
+    }
 }
 /**
  * 打印记录

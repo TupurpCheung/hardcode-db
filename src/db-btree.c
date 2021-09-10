@@ -27,7 +27,35 @@ void set_node_root(void *page,bool is_root) {
     uint8_t value = is_root;
 	*((uint8_t *) (page + IS_ROOT_OFFSET)) = value;
 }
+//创建根节点
+//参数table 表
+//参数right_child_page_num，最右侧子节点的页码
+void create_new_root(Table *table,uint32_t right_child_page_num) {
+  uint32_t left_child_max_key;
+  //获取原来的根节点，稍后数据会被拷贝到新申请的左节点
+  void *root = get_page(table->pager,table->root_page_num);
+  //获取右节点
+  //void *right_child = get_page(table->pager,right_child_page_num);
+  //申请新的页空间，稍后用来存放左节点
+  uint32_t left_child_page_num = get_unused_page_num(table->pager);
+  void *left_child = get_page(table->pager,left_child_page_num);
 
+  //将旧的根节点数据拷贝到左节点
+  memcpy(left_child,root,PAGE_SIZE);
+  set_node_root(left_child,false);
+
+  //更新旧的根节点为内部节点
+  initialize_internal_node(root);
+  set_node_root(root,true);
+  *internal_node_num_keys(root) = 1;
+  *internal_node_child(root,0) = left_child_page_num;
+
+  //左节点的最大主键值
+  left_child_max_key = get_node_max_key(left_child);
+  *internal_node_key(root, 0) = left_child_max_key;
+
+  *internal_node_right_child(root) = right_child_page_num;
+}
 
 
 
@@ -46,7 +74,7 @@ void set_node_type(void *page,NodeType type) {
 	*((uint8_t *)(page + NODE_TYPE_OFFSET)) = value;
 }
 //获取节点存储记录的最大主键，对于内部节点，最大键始终是其右键。对于叶节点，它是最大索引处的键
-uint32_t uint32_t get_node_max_key(void *page) {
+uint32_t get_node_max_key(void *page) {
     switch (get_node_type(page)) {
     case NODE_INTERNAL:
         return *internal_node_key(page, *internal_node_num_keys(page) - 1);
@@ -65,7 +93,7 @@ uint32_t uint32_t get_node_max_key(void *page) {
 uint32_t* internal_node_num_keys(void *page) {
 	return page + INTERNAL_NODE_NUM_KEYS_OFFSET;
 }
-//获取主键最右边叶子节点地址
+//获取内部节点的最右边叶子节点地址
 uint32_t* internal_node_right_child(void  *page) {
 	return page + INTERNAL_NODE_RIGHT_CHILD_OFFSET;
 }
@@ -129,20 +157,21 @@ void initialize_leaf_node(void* page) {
 }
 
 //插入数据
-void leaf_node_insert(Cursor* cursor, uint32_t key,Row* row) {
+void leaf_node_insert(Cursor* cursor, uint32_t key,Row *row) {
 	//获取记录所在的页
 	void* page = get_page(cursor->table->pager,cursor->page_num);
 
 	//计算该页存放了多少个记录
 	uint32_t num_cells = *leaf_node_num_cells(page);
 
+    //当前页存放子节点已满
 	if (num_cells >= LEAF_NODE_MAX_CELLS) {
-		//当前页存放子节点已满
-		//TODO 需要切分子节点
-		printf("Need to implement splitting a leaft node\n");
-		exit(EXIT_FAILURE);
+		//切分叶子节点
+		leaf_node_split_and_insert(cursor,key,row);
+		return;
 	}
 
+  //继续在当前叶子节点插入
 	if (cursor->cell_num < num_cells) {
     //将数据后移
 		uint32_t i ;
@@ -241,13 +270,15 @@ Pager* pager_open(const char* filename) {
   	pager->file_descriptor = fd;
   	//指定文件长度
   	pager->file_length = file_length;
-  	//指定共有多少页
+  	//指定文件中共有多少页
   	pager->num_pages = (file_length / PAGE_SIZE);
   	//使用B+tree后，文件大小是页对齐的，也就是一定是4K的整倍数
   	if (file_length % PAGE_SIZE != 0) {
   		printf("Db file is not a whole number of pages. Corrupt file.\n");
   		exit(EXIT_FAILURE);
   	}
+
+    //指定表最大可以存放的的页数并初始化为null
 		uint32_t i ;
 		uint32_t size = TABLE_MAX_PAGES;
 		for(i = 0 ;i< size;i++) {
@@ -256,7 +287,7 @@ Pager* pager_open(const char* filename) {
 		return pager;
 }
 /**
-*从内存获取指定页，若不存在，则从文件加载
+*从内存获取指定页，若不存在，则从文件加载，文件中若也没有该页数据，则仅申请空间
 * @return pager.pages[page_num]
 */
 void* get_page(Pager* pager, uint32_t page_num) {
@@ -351,8 +382,8 @@ Table* table_open(const char* filename) {
   	void* root_node = get_page(pager,0);
   	//没有数据时，初始化的节点使用叶子节点
   	initialize_leaf_node(root_node);
-  	//设置为根节点
-  	set_node_root(root_node, true);
+      //设置为根节点
+    set_node_root(root_node, true);
   }
 
   return table;
@@ -440,4 +471,75 @@ void cursor_advance(Cursor* cursor) {
   if (cursor->cell_num >= (*leaf_node_num_cells(node))) {
     cursor->end_of_table = true;
   }
+}
+//获取当前数据库未被使用的页码（最大被使用页）
+uint32_t get_unused_page_num(Pager *pager) {
+
+  //页码从0开始，所以数据库现在一共有10页的时候，被使用的最大页为9，则未被使用的页码为10
+  return pager->num_pages;
+}
+
+//分裂旧的叶子节点，并插入数
+void leaf_node_split_and_insert(Cursor *cursor,uint32_t key,Row *value) {
+
+    //创建新的叶子节点，并从旧的叶子节点复制一半数据到新节点
+    //并更新两个节点的父节点（内部节点），如果没有，则创建
+    
+
+    //获取旧节点的句柄
+    void *old_node = get_page(cursor->table->pager,cursor->page_num); 
+
+    //计算未被使用的页号
+    uint32_t new_page_num = get_unused_page_num(cursor->table->pager);
+
+    //创建新页（叶子节点）
+    void *new_node = get_page(cursor->table->pager,new_page_num);
+    //初始化新节点
+    initialize_leaf_node(new_node);
+
+    //将旧节点的数据复制到新节点
+    int32_t i;
+    for ( i = LEAF_NODE_MAX_CELLS; i >= 0; i--){
+      uint32_t index_within_node;
+      void *destination;
+      void *destination_node;
+
+      //一半放右节点，一半放左节点
+      if(i >= LEAF_NODE_LEFT_SPLIT_COUNT){
+        destination_node = new_node;
+      }else{
+        destination_node = old_node;
+      }
+
+      //计算数据即将被存放的节点位置，以保证旧数据的有序性
+      index_within_node = i % LEAF_NODE_LEFT_SPLIT_COUNT;
+      //数据被拷贝的目的地址
+      destination = leaf_node_cell(destination_node,index_within_node);
+
+      if((uint32_t)i == cursor->cell_num) {
+        //记录是当前游标的记录
+        serialize_row(value,destination);
+      }else if((uint32_t)i > cursor->cell_num){
+        //TODO 为啥
+        memcpy(destination,leaf_node_cell(old_node,i-1),LEAF_NODE_CELL_SIZE);
+      }else{
+        //TODO 为啥
+        memcpy(destination,leaf_node_cell(old_node,i),LEAF_NODE_CELL_SIZE);
+      }
+
+      //更新两个节点的单元格（记录）计数
+      *(leaf_node_num_cells(old_node)) = LEAF_NODE_LEFT_SPLIT_COUNT;
+      *(leaf_node_num_cells(new_node)) = LEAF_NODE_RIGHT_SPLIT_COUNT;
+    }
+
+    if(is_node_root(old_node)) {
+        //如果旧节点是根节点，则需要创建新的内部根节点，并将旧节点下挂
+        return create_new_root(cursor->table,new_page_num);
+    }else {
+      printf("Need to implement update parent after split\n");
+      exit(EXIT_FAILURE);
+    }
+
+
+
 }

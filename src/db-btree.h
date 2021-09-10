@@ -16,6 +16,10 @@
 bool is_node_root(void *page);
 //设置节点是否根节点
 void set_node_root(void *page,bool is_root);
+//创建根节点
+//参数table 表
+//参数right_child_page_num，最右侧子节点的页码
+void create_new_root(Table *table,uint32_t right_child_page_num);
 
 
 
@@ -109,11 +113,13 @@ void table_close(Table* table);
 
 
 
-
-
-
 void* cursor_value(Cursor* cursor);
 void cursor_advance(Cursor* cursor);
+
+//获取当前数据库未被使用的页码（最大被使用页）
+uint32_t get_unused_page_num(Pager *pager);
+//分裂旧的叶子节点，并插入数
+void leaf_node_split_and_insert(Cursor *cursor,uint32_t key,Row *value);
 
 
 #endif
