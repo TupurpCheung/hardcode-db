@@ -93,15 +93,15 @@ uint32_t get_node_max_key(void *page) {
 uint32_t* internal_node_num_keys(void *page) {
 	return page + INTERNAL_NODE_NUM_KEYS_OFFSET;
 }
-//获取内部节点的最右边叶子节点地址
+//获取内部节点的最右边（最大）子节点所在的页
 uint32_t* internal_node_right_child(void  *page) {
 	return page + INTERNAL_NODE_RIGHT_CHILD_OFFSET;
 }
-//获取第 cell_num 个叶子节点
+//获取第 cell_num 个子节点所在的页
 uint32_t* internal_node_cell(void *page,uint32_t cell_num) {
 	return page + INTERNAL_NODE_HEADER_SIZE + cell_num * INTERNAL_NODE_CELL_SIZE;
 }
-//获取第 child_num 个叶子节点
+//获取第 child_num（child_num >=0） 个叶子节点所在的页
 uint32_t* internal_node_child(void *page,uint32_t child_num) {
 	uint32_t num_keys = *internal_node_num_keys(page);
     if (child_num > num_keys) {
@@ -113,7 +113,7 @@ uint32_t* internal_node_child(void *page,uint32_t child_num) {
 
     return internal_node_cell(page, child_num);
 }
-//获取第 child_num 个叶子节点 的主键
+//获取第 child_num 个子节点包含记录的最大主键值的句柄
 uint32_t* internal_node_key(void *page,uint32_t key_num) {
 	return internal_node_cell(page, key_num) + INTERNAL_NODE_CHILD_SIZE;
 }
@@ -123,6 +123,55 @@ void initialize_internal_node(void *page) {
     set_node_root(page, false);
     *internal_node_num_keys(page) = 0;
 }
+//在内部节点中查找指定记录，先找到叶子节点，再从叶子节点中查找数据
+Cursor *internal_node_find(Table *table,uint32_t page_num,uint32_t key) {
+	//获取内部节点的指针
+	void *page = get_page(table->pager,page_num);
+	//查询当前内部节点有多少叶子节点
+	uint32_t num_keys = *internal_node_num_keys(page);
+
+	uint32_t child_page_num;
+	uint32_t *child_page;
+
+	uint32_t min_index = 0;
+	uint32_t max_index = num_keys;
+
+	//假设一种情况，共有11个子节点，即从0到10，要查找的值在节点5上
+	//则二分查找的左侧节点，右侧节点，查找节点的情形如下，注意，退出条件为min = max
+	//* min  * max  *  middle
+	//* 0 * 10 * 5  这个时候，按照上帝视角，我们已经查到所在的叶子节点了，但不满足退出条件，还要继续，max = middle = 5
+	//* 0 * 5 * 2  继续 min = middle + 1 = 3
+	//* 3 * 5 * 4  继续 min  = middle + 1 = 5
+	// max = min  = 5 退出，查得要找的key在节点5上
+	while(min_index != max_index) {
+		//二分查找
+		uint32_t index = (min_index + max_index) / 2;
+		//二分查找到的中间的值，internal_node_key方法得到的是指针，需要*号取值
+		uint32_t key_to_right = *internal_node_key(page,index);
+
+		//中间的值大于等于目标值，则数据在左边，缩小二分查找的最大值
+		if(key_to_right >= key) {
+			max_index = index;
+		}else{
+			//反之，增大二分查找的最小值
+			min_index = index + 1;
+		}
+	}
+
+	//获得子节点所在的页号
+	child_page_num = *internal_node_child(page,min_index);
+	//获取子节点的页
+	child_page = get_page(table->pager,child_page_num);
+	switch (get_node_type(child_page)) {
+		case NODE_LEAF:
+			return leaf_node_find(table,child_page_num,key);
+		case NODE_INTERNAL:
+			return internal_node_find(table,child_page_num,key);	
+	}
+
+}
+
+
 
 
 
@@ -412,8 +461,7 @@ Cursor* table_find(Table* table,uint32_t key) {
 	if(get_node_type(root_node) == NODE_LEAF) {
      return leaf_node_find(table, root_page_num, key);
 	}else {
-		printf("Need to implement searching an internal node\n");
-	  exit(EXIT_FAILURE);
+		return internal_node_find(table, root_page_num, key);
   }	
 
 } 

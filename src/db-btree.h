@@ -51,6 +51,8 @@ uint32_t* internal_node_child(void *page,uint32_t child_num);
 uint32_t* internal_node_key(void *page,uint32_t key_num);
 //初始化内部节点
 void initialize_internal_node(void *page);
+//在内部节点中查找指定记录，先找到叶子节点，再从叶子节点中查找数据
+Cursor *internal_node_find(Table *table,uint32_t page_num,uint32_t key);
 
 
 
