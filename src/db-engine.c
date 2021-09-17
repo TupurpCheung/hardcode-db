@@ -88,6 +88,7 @@ ExecuteResult execute_insert(Statement* statement,Table* table) {
 
 
 	if(cursor->cell_num < num_cells) {
+		//数据已存在
 		uint32_t key_at_index = *leaf_node_key(page, cursor->cell_num);
 		if (key_at_index == key_to_insert) {
             return EXECUTE_DUPLICATE_KEY;

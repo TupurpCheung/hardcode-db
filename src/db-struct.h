@@ -63,9 +63,9 @@ typedef struct {
 typedef struct {
 	//表句柄
 	Table* table;
-	//当前是第几页
+	//当前访问的页码
 	uint32_t page_num;
-	//页内的记录数量
+	//当前访问的第几条记录
 	uint32_t cell_num;
 	//是否是表尾
 	bool end_of_table;

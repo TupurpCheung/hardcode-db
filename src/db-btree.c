@@ -202,7 +202,10 @@ void initialize_leaf_node(void* page) {
 	set_node_type(page,NODE_LEAF);
 	//默认不是根节点
 	set_node_root(page, false);
+	//默认记录数为0
 	*leaf_node_num_cells(page) = 0; 
+	//叶子节点初始化时，默认后继兄弟叶子节点的page_num为0
+	*leaf_node_next_leaf(page) = 0;
 }
 
 //插入数据
@@ -220,7 +223,7 @@ void leaf_node_insert(Cursor* cursor, uint32_t key,Row *row) {
 		return;
 	}
 
-  //继续在当前叶子节点插入
+    //继续在当前叶子节点插入，参见leaf_node_find 方法里的注释，可以解释为什么在当前cursor前面插入
 	if (cursor->cell_num < num_cells) {
     //将数据后移
 		uint32_t i ;
@@ -237,8 +240,8 @@ void leaf_node_insert(Cursor* cursor, uint32_t key,Row *row) {
 	*(leaf_node_num_cells(page)) += 1;
 	//更新节点的主键
 	*(leaf_node_key(page,cursor->cell_num)) = key;
-  //序列化记录到内存
-	 serialize_row(row, leaf_node_value(page, cursor->cell_num));
+  	//序列化记录到内存
+	serialize_row(row, leaf_node_value(page, cursor->cell_num));
 
 }
 
@@ -254,9 +257,21 @@ Cursor* leaf_node_find(Table *table,uint32_t page_num, uint32_t key) {
 	cursor->page_num = page_num;
 
 	//二分查找
-	//最大索引=当前页存放的子记录数
+	//最大值=当前页存放的子记录数
 	one_past_max_index = num_cells;
 
+	//假设待查找的主键在当前页存在，则返回对应的cursor即可
+
+	//假设当前叶子节点已有7条数据，即0-6，且要查找的key不存在,小于page[3],大于page[2]
+	// * min * max * mid
+	// * 0 * 7 * 3  此时 下标3处记录的值的主键 大于 形参key，则 max = 3,mid = （0 + 3）/ 2 = 1
+	// * 0 * 3 * 1  此时 下标1处记录的值的主键 小于 形参key，则 min = 2,mid = （2 + 3）/ 2 = 2
+	// * 2 * 3 * 2  此时 下标2处记录的值的主键 小于 形参key，则 min = 3
+	// min = max  =3 ，退出，所以待查找的主键在当前页不存在时，返回的是比传入主键大的记录Cursor
+	// 即要求随后插入这条新记录时，要插入在返回cursor的前面
+	// 
+	// 
+	// 当要查找的key不存在，且大于此节点所有记录，则cursor->cell_num = 14
 	while(one_past_max_index != min_index) {
 		//二分
 		uint32_t index = (min_index + one_past_max_index) / 2;
@@ -284,6 +299,10 @@ Cursor* leaf_node_find(Table *table,uint32_t page_num, uint32_t key) {
 
 }
 
+//下一个叶子节点所在页的指针
+uint32_t *leaf_node_next_leaf(void *page) {
+	return page + LEAF_NODE_NEXT_LEAF_OFFSET;
+}
 
 
 
@@ -442,12 +461,9 @@ Table* table_open(const char* filename) {
 * 读取表头 
 */
 Cursor* table_start(Table* table) {
-	Cursor* cursor = malloc(sizeof(Cursor));
-	cursor->table = table;
-	cursor->page_num = table->root_page_num;
-	cursor->cell_num = 0;
-	void* root_node = get_page(table->pager,table->root_page_num);
-	uint32_t num_cells = *leaf_node_num_cells(root_node);
+	Cursor *cursor = table_find(table,0);
+	void *page = get_page(table->pager,cursor->page_num);
+	uint32_t num_cells = *leaf_node_num_cells(page);
 	cursor->end_of_table = (num_cells == 0);
 	return cursor;
 } 
@@ -513,11 +529,21 @@ void* cursor_value(Cursor* cursor) {
 }
 
 void cursor_advance(Cursor* cursor) {
-	uint32_t page_num = cursor->page_num;
-	void* node =get_page(cursor->table->pager,page_num);
-    cursor->cell_num += 1;
-  if (cursor->cell_num >= (*leaf_node_num_cells(node))) {
-    cursor->end_of_table = true;
+  uint32_t page_num = cursor->page_num;
+  void* page =get_page(cursor->table->pager,page_num);
+  cursor->cell_num += 1;
+  if (cursor->cell_num >= (*leaf_node_num_cells(page))) {
+    
+    //当前节点已经迭代结束，遍历下一个节点
+    uint32_t next_page_num = *leaf_node_next_leaf(page);
+    if(0 == next_page_num){
+    	//到达最后
+    	cursor->end_of_table = true;
+    }else{
+    	cursor->page_num = next_page_num;
+    	cursor->cell_num =0;
+    }
+
   }
 }
 //获取当前数据库未被使用的页码（最大被使用页）
@@ -544,34 +570,57 @@ void leaf_node_split_and_insert(Cursor *cursor,uint32_t key,Row *value) {
     void *new_node = get_page(cursor->table->pager,new_page_num);
     //初始化新节点
     initialize_leaf_node(new_node);
+    //旧节点的兄弟节点变成新节点的兄弟，新节点变成旧节点的兄弟
+    *leaf_node_next_leaf(new_node) = *leaf_node_next_leaf(old_node); 
+    *leaf_node_next_leaf(old_node) = new_page_num;
 
     //将旧节点的数据复制到新节点
+    //一个叶子节点最多可存放14个节点，cell_num为 0-13
     int32_t i;
+
+    //循环保证的是，值从大到小遍历，包括旧节点的全部14个节点（下标为0-13）和新插入的1个节点
     for ( i = LEAF_NODE_MAX_CELLS; i >= 0; i--){
       uint32_t index_within_node;
       void *destination;
       void *destination_node;
 
-      //一半放右节点，一半放左节点
+      //一半放右节点，一半放左节点      
       if(i >= LEAF_NODE_LEFT_SPLIT_COUNT){
+      	// 7-14 共8个放新节点
         destination_node = new_node;
       }else{
+      	// 0-6 共7个放旧节点
         destination_node = old_node;
       }
 
       //计算数据即将被存放的节点位置，以保证旧数据的有序性
+      //此程序旧的叶子节点放7个，新的叶子节点放7个
+      // 14 % 7 = 0
+      // 13 % 7 = 6
+      // 8 % 7 = 1
+      // 7 % 7 = 0
+      // 6 % 7 = 6
+      // 5 % 7 = 5
+      // 0 % 7 = 0  
       index_within_node = i % LEAF_NODE_LEFT_SPLIT_COUNT;
       //数据被拷贝的目的地址
       destination = leaf_node_cell(destination_node,index_within_node);
 
+
       if((uint32_t)i == cursor->cell_num) {
-        //记录是当前游标的记录
-        serialize_row(value,destination);
+        //新插入的值
+      	serialize_row(value,leaf_node_value(destination_node, index_within_node));
+      	*leaf_node_key(destination_node, index_within_node) = key;
+
       }else if((uint32_t)i > cursor->cell_num){
-        //TODO 为啥
+      	//这个逻辑里面，所有的数据都是大于新插入的值的,真实的位置被新插入的值向后挤了一个位置，所以下标需要减去1
+      	//举个列子，假设cursor->cell_num = 11，则新插入的值是小于下标 11，12，13的
+      	//循环从14开始，则旧节点是根本没有下标14的，所以需要减去1
+      
         memcpy(destination,leaf_node_cell(old_node,i-1),LEAF_NODE_CELL_SIZE);
       }else{
-        //TODO 为啥
+      	//这个逻辑里，所有的值都是小于新插入的值的
+      
         memcpy(destination,leaf_node_cell(old_node,i),LEAF_NODE_CELL_SIZE);
       }
 

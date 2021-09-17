@@ -88,7 +88,7 @@ extern const uint32_t INTERNAL_NODE_HEADER_SIZE ;
 /**
 * 内部节点的主体布局，由cell组成的数组
 */
-//子节点指针
+//子节点对应的页码
 extern const uint32_t INTERNAL_NODE_CHILD_SIZE;
 //左侧子节点中最大的key
 extern const uint32_t INTERNAL_NODE_KEY_SIZE;
@@ -104,6 +104,9 @@ extern const uint32_t INTERNAL_NODE_CELL_SIZE;
 extern const uint32_t LEAF_NODE_NUM_CELLS_OFFSET ;
 extern const uint32_t LEAF_NODE_NUM_CELLS_SIZE ;
 
+//下一个叶子节点所在的页
+const uint32_t LEAF_NODE_NEXT_LEAF_OFFSET;
+const uint32_t LEAF_NODE_NEXT_LEAF_SIZE;
 
 //叶子节点头部布局的大小，公共头+叶子节点特有头
 extern const uint32_t LEAF_NODE_HEADER_SIZE ;

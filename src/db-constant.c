@@ -89,7 +89,7 @@ const uint32_t INTERNAL_NODE_HEADER_SIZE = 14;
 /**
 * 内部节点的主体布局，由cell组成的数组
 */
-//子节点指针
+//子节点对应的页码
 const uint32_t INTERNAL_NODE_CHILD_SIZE = 4;
 //左侧子节点中最大的key
 const uint32_t INTERNAL_NODE_KEY_SIZE = 4;
@@ -108,8 +108,12 @@ const uint32_t INTERNAL_NODE_CELL_SIZE = 8;
 const uint32_t LEAF_NODE_NUM_CELLS_OFFSET = 6;
 const uint32_t LEAF_NODE_NUM_CELLS_SIZE = 4;
 
+//下一个叶子节点对应的页码
+const uint32_t LEAF_NODE_NEXT_LEAF_OFFSET = 10;
+const uint32_t LEAF_NODE_NEXT_LEAF_SIZE = 4;
+
 //叶子节点头部布局的大小，10个字节
-const uint32_t LEAF_NODE_HEADER_SIZE = 10;
+const uint32_t LEAF_NODE_HEADER_SIZE = 14;
 
 /**
 * 叶子节点的主体布局，由key+row 组成的数组
@@ -128,10 +132,10 @@ const uint32_t LEAF_NODE_VALUE_SIZE = 291;
 const uint32_t LEAF_NODE_CELL_SIZE = 295;
 
 //一页（4k=4094字节）可用于存储节点数据的空间=4094字节-页头节点
-const uint32_t LEAF_NODE_SPACE_FOR_CELLS = 4096 - 10;
+const uint32_t LEAF_NODE_SPACE_FOR_CELLS = 4096 - 14;
 
 //一页最多可以存放多少个叶子节点
-const uint32_t LEAF_NODE_MAX_CELLS = 4086 / 295;
+const uint32_t LEAF_NODE_MAX_CELLS = 4082 / 295;
 
 
 /**
@@ -143,5 +147,5 @@ const uint32_t LEAF_NODE_MAX_CELLS = 4086 / 295;
  * 如果 N+1 是奇数，我就选择左节点来获得一个以上的 cell。
  * 
  */
-const uint32_t LEAF_NODE_RIGHT_SPLIT_COUNT = (4086 / 295 + 1) / 2;
-const uint32_t LEAF_NODE_LEFT_SPLIT_COUNT = (4086 / 295 + 1) - ((4086 / 295 + 1) / 2);
+const uint32_t LEAF_NODE_RIGHT_SPLIT_COUNT = (4082 / 295 + 1) / 2;
+const uint32_t LEAF_NODE_LEFT_SPLIT_COUNT = (4082 / 295 + 1) - ((4082 / 295 + 1) / 2);

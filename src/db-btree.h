@@ -74,6 +74,8 @@ void initialize_leaf_node(void* page) ;
 void leaf_node_insert(Cursor* cursor, uint32_t key,Row* row);
 //查找数据（记录）
 Cursor* leaf_node_find(Table *table,uint32_t page_num, uint32_t key);
+//下一个叶子节点所在页的指针
+uint32_t *leaf_node_next_leaf(void *page);
 
 
 
